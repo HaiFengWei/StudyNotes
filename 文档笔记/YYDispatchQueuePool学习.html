@@ -472,11 +472,11 @@ pre[class*="language-"] {
 
 <h2 id="toc_1">目的：</h2>
 
-<p>解决在使用GCD多线程情形下，创建线程过多，造成CPU开销过大，挤占掉主线程的 CPU 资源。</p>
+<p>解决当用<strong>并行队列</strong>来执行大量块时，当某个块所在线程被锁住时，<strong>并列队列</strong>会创建大量线程以至于占用了过多资源而影响到主线程的问题。</p>
 
 <h2 id="toc_2">原理</h2>
 
-<p><strong>YYDispatchQueuePool</strong>是在开启多线程时，创建所需线程数的<strong>同步队列</strong>，将任务尽可能平局分配给每个<strong>同步队列</strong>执行</p>
+<p><strong>YYDispatchQueuePool</strong>用一个全局的<strong>串行队列</strong>来尽量控制全局线程数。</p>
 
 <h2 id="toc_3">分析源码（TODO:待完善）</h2>
 
@@ -502,7 +502,7 @@ NSQualityOfServiceDefault         //优先级介于user-initiated 和 utility，
 
 <p>3、如何获取队列</p>
 
-<p>传入上下文，根据上下文去分配任务，返回线程队列</p>
+<p>传入上下文，根据上下文去分配任务，返回<strong>串行队列</strong></p>
 
 <div><pre><code class="language-objectivec">static dispatch_queue_t YYDispatchContextGetQueue(YYDispatchContext *context) {
     uint32_t counter = (uint32_t)OSAtomicIncrement32(&amp;context-&gt;counter);

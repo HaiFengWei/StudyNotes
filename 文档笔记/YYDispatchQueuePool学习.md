@@ -1,9 +1,9 @@
 # YYDispatchQueuePool学习
 
 ##目的：
-解决在使用GCD多线程情形下，创建线程过多，造成CPU开销过大，挤占掉主线程的 CPU 资源。
+解决当用**并行队列**来执行大量块时，当某个块所在线程被锁住时，**并列队列**会创建大量线程以至于占用了过多资源而影响到主线程的问题。
 ##原理
-**YYDispatchQueuePool**是在开启多线程时，创建所需线程数的**同步队列**，将任务尽可能平局分配给每个**同步队列**执行
+**YYDispatchQueuePool**用一个全局的**串行队列**来尽量控制全局线程数。
 ##分析源码（TODO:待完善）
 1、首先了解Qos的优先级
 
@@ -31,7 +31,7 @@ typedef struct{
 
 3、如何获取队列
 
-传入上下文，根据上下文去分配任务，返回线程队列
+传入上下文，根据上下文去分配任务，返回**串行队列**
 
 ~~~objc
 static dispatch_queue_t YYDispatchContextGetQueue(YYDispatchContext *context) {
