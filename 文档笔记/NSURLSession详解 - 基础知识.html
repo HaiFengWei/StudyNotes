@@ -5,7 +5,7 @@
 
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-<title>YYDispatchQueuePool学习</title>
+
 
 
 <style type="text/css">
@@ -468,71 +468,139 @@ pre[class*="language-"] {
 
 <body>
 
-<h1 id="toc_0">YYDispatchQueuePool学习</h1>
+<h1 id="toc_0">NSURLSession详解 - 基础知识</h1>
 
-<h2 id="toc_1">目的：</h2>
+<h2 id="toc_1">简介</h2>
 
-<p>解决在使用GCD多线程情形下，创建线程过多，造成CPU开销过大，挤占掉主线程的 CPU 资源。</p>
+<p>1、<strong>NSURLSession</strong>在2013年随着iOS7的发布一起面世，苹果对它的定位是作为<strong>NSURLConnection</strong>的替代者</p>
 
-<h2 id="toc_2">原理</h2>
+<p>2、<strong>Session</strong>翻译为中文意思是会话，我们知道，在七层网络协议中有<strong>物理层-&gt;数据链路层-&gt;网络层-&gt;传输层-&gt;会话层-&gt;表示层-&gt;应用层</strong>，那我们可以将<strong>NSURLSession</strong>类理解为会话层，用于管理网络接口的创建、维护、删除等等工作，我们要做的工作也只是会话层之后的层即可，底层的工作<strong>NSURLSession</strong>已经帮我们封装好了</p>
 
-<p><strong>YYDispatchQueuePool</strong>是在开启多线程时，创建所需线程数的<strong>同步队列</strong>，将任务尽可能平局分配给每个<strong>同步队列</strong>执行</p>
+<p>3、另外还有一些<strong>Session</strong>，比如<strong>AVAudioSession</strong>用于音视频访问，<strong>WCSession</strong>用于<strong>WatchOS</strong>通讯，它们都是建立一个会话，并管理会话，封装一些底层，方便我们使用</p>
 
-<h2 id="toc_3">分析源码（TODO:待完善）</h2>
+<h2 id="toc_2">基本知识</h2>
 
-<p>1、首先了解Qos的优先级</p>
+<h3 id="toc_3">1、NSUrl简介</h3>
 
-<div><pre><code class="language-objectivec">NSQualityOfServiceUserInteractive //与用户交互的任务，这些任务通常跟UI级别的刷新相关，比如动画，这些任务需要在一瞬间完成
-NSQualityOfServiceUserInitiated   //由用户发起的并且需要立即得到结果的任务，比如滑动scroll view时去加载数据用于后续cell的显示，这些任务通常跟后续的用户交互相关，在几秒或者更短的时间内完成
-NSQualityOfServiceUtility         //一些可能需要花点时间的任务，这些任务不需要马上返回结果，比如下载的任务，这些任务可能花费几秒或者几分钟的时间 
-NSQualityOfServiceBackground      //这些任务对用户不可见，比如后台进行备份的操作，这些任务可能需要较长的时间，几分钟甚至几个小时 
-NSQualityOfServiceDefault         //优先级介于user-initiated 和 utility，当没有 QoS信息时默认使用，开发者不应该使用这个值来设置自己的任务</code></pre></div>
+<p>URL(统一资源定位符) ,指定资源位置。</p>
 
-<p>Qos与GCD queue优先级对应关系
-<img src="http://upload-images.jianshu.io/upload_images/458529-74ed8a8b44ba56e5.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240" alt=""></p>
+<div><pre><code class="language-objectivec">    /**
+     协议：不同的协议，代表着不同的资源查找方式、资源传输方式，比如常用的http，ftp等
+     主机地址：存放资源的主机的IP地址（域名）
+     路径：资源在主机中的具体位置
+     参数：参数可有可无，也可以多个。如果带参数的话，用“?”号后面接参数，多个参数的话之间用&amp;隔开
+     */
+    NSURL *url = [NSURL URLWithString:@&quot;协议://主机地址/路径?参数&amp;参数&quot;];</code></pre></div>
 
-<p>2、了解结构体YYDispatchContext</p>
+<p>示例：</p>
 
-<div><pre><code class="language-objectivec">typedef struct{ 
-  const char *name;    //线程名
-  void **queues;       //队列数组
-  uint32_t queueCount; //队列数目
-  int32_t counter;     //自增计数
-}YYDispatchContext;</code></pre></div>
+<div><pre><code class="language-objectivec">    NSURL *url = [NSURL URLWithString:@&quot;http://www.baidu.com/search?id=1&quot;];
+    //协议 http 
+    NSLog(@&quot;scheme:%@&quot;, [url scheme]);
+    
+    //域名 www.baidu.com 
+    NSLog(@&quot;host:%@&quot;, [url host]);
+    
+    //完整的url字符串 http://www.baidu.com:8080/search?id=1
+    NSLog(@&quot;absoluteString:%@&quot;, [url absoluteString]);
+    
+    //相对路径 search 
+    NSLog(@&quot;relativePath: %@&quot;, [url relativePath]);
+    
+    //端口号 
+    NSLog(@&quot;port :%@&quot;, [url port]);
+    
+    //路径 search 
+    NSLog(@&quot;path: %@&quot;, [url path]);
+    
+    //search 
+    NSLog(@&quot;pathComponents:%@&quot;, [url pathComponents]);
+    
+    //参数 id=1 
+    NSLog(@&quot;Query:%@&quot;, [url query]);</code></pre></div>
 
-<p>3、如何获取队列</p>
+<h3 id="toc_4">2、NSURLRequest简介</h3>
 
-<p>传入上下文，根据上下文去分配任务，返回线程队列</p>
+<h4 id="toc_5">简介：</h4>
 
-<div><pre><code class="language-objectivec">static dispatch_queue_t YYDispatchContextGetQueue(YYDispatchContext *context) {
-    uint32_t counter = (uint32_t)OSAtomicIncrement32(&amp;context-&gt;counter);
-    void *queue = context-&gt;queues[counter % context-&gt;queueCount];
-    return (__bridge dispatch_queue_t)(queue);
-}</code></pre></div>
+<p>一个独立的独立加载请求的协议和解决方案，它封装了 <strong>load URL</strong> 和 <strong>the policy</strong>，当你发送了网络请求时候可以使用缓存，你可以通过它 <strong>propertyForKey:inRequest:</strong> 和 <strong>setProperty:forKey:inRequest:</strong>.这两个方法添加你的协议</p>
 
-<p><strong>注：</strong> OSAtomicIncrement32是自增函数，原子性属于线程安全</p>
+<h4 id="toc_6">使用：</h4>
 
-<h2 id="toc_4">调用示例（TODO:待完善）</h2>
+<div><pre><code class="language-objectivec">NSURLRequest *request = [NSURLRequest requestWithURL:url cachePolicy:NSURLRequestUseProtocolCachePolicy timeoutInterval:30.0];</code></pre></div>
 
-<p>导入头文件<code>#import &quot;YYDispatchQueuePool.h&quot;</code></p>
+<h5 id="toc_7">2.1、url：资源路径</h5>
 
-<div><pre><code class="language-objectivec">- (void)testYYDispatchQueuePool
-{
-    // 创建YYDispatchQueuePool实例，设置最大并发数为3
-    YYDispatchQueuePool *pool = [[YYDispatchQueuePool alloc] initWithName:@&quot;file. testYYDispatchQueuePool&quot; queueCount:3 qos:NSQualityOfServiceBackground];
-    // 遍历执行任务
-    for (int index = 0; index &lt; 100; index++) {
-        // 获取队列
-        dispatch_queue_t queue = [pool queue];
-        dispatch_async(queue, ^{
-            NSLog(@&quot;index:%d&quot;,index);
-        });
-    }
-}</code></pre></div>
+<h5 id="toc_8">2.2、cachePolicy：缓存策略（无论使用哪种缓存策略，都会在本地缓存数据），类型为枚举类型，取值如下：</h5>
 
-<h2 id="toc_5">源码链接</h2>
+<div><pre><code class="language-objectivec">NSURLRequestUseProtocolCachePolicy = 0       //默认的缓存策略，使用协议的缓存策略
+NSURLRequestReloadIgnoringLocalCacheData = 1 //每次都从网络加载
+NSURLRequestReturnCacheDataElseLoad = 2      //返回缓存否则加载，很少使用
+NSURLRequestReturnCacheDataDontLoad = 3      //只返回缓存，没有也不加载，很少使用
+</code></pre></div>
 
-<h4 id="toc_6"><a href="https://github.com/ibireme/YYDispatchQueuePool">YYDispatchQueuePool</a></h4>
+<h5 id="toc_9">2.3、timeoutInterval：超时时长，默认60s，这里设置为30s</h5>
+
+<h5 id="toc_10">2.4、基础属性：</h5>
+
+<div><pre><code class="language-objectivec">// HPPT请求方式 默认为“GET”
+@property (copy) NSString *HTTPMethod;
+
+//通过字典设置HTTP请求头的键值数据
+@property (nullable, copy) NSDictionary&lt;NSString *, NSString *&gt; *allHTTPHeaderFields;
+
+//设置http请求头中的字段值
+- (void)setValue:(nullable NSString *)value forHTTPHeaderField:(NSString *)field;
+
+//向http请求头中添加一个字段
+- (void)addValue:(NSString *)value forHTTPHeaderField:(NSString *)field;
+
+//设置http请求体 用于POST请求
+@property (nullable, copy) NSData *HTTPBody;
+
+//设置http请求体的输入流
+@property (nullable, retain) NSInputStream *HTTPBodyStream;
+
+//设置发送请求时是否发送cookie数据
+@property BOOL HTTPShouldHandleCookies;
+
+//设置请求时是否按顺序收发 默认禁用 在某些服务器中设为YES可以提高网络性能
+@property BOOL HTTPShouldUsePipelining;</code></pre></div>
+
+<h4 id="toc_11">示例：</h4>
+
+<div><pre><code class="language-objectivec">    /** GET方式 */
+    NSString *urlString = [NSString stringWithFormat:@&quot;http://jssb.zust.edu.cn/androidLogin.action?id=%@&amp;password=%@&amp;role=%@&quot;,@&quot;admin02&quot;,@&quot;admin02&quot;,@&quot;dean&quot;];
+    
+    //创建URL
+    NSURL *url = [NSURL URLWithString:urlString];
+    
+    //创建request实例对象
+    NSURLRequest *request = [[NSURLRequest requestWithURL:url];
+    
+    
+    
+
+   /** POST方式 */
+    NSString *urlString = [NSString stringWithFormat:@&quot;http://jssb.zust.edu.cn/androidLogin.action&quot;];
+    
+    //创建request可变实例对象
+    NSMutableURLRequest *request = [[NSMutableURLRequest alloc] init] ;
+    
+    // 设置url
+    [request setURL:[NSURL URLWithString:urlString]];
+    
+    //设置请求方式
+    [request setHTTPMethod:@&quot;POST&quot;];
+    
+    // 设置请求头
+    NSString *contentType = [NSString stringWithFormat:@&quot;text/xml&quot;];
+    [request addValue:contentType forHTTPHeaderField: @&quot;Content-Type&quot;];
+    
+    // 设置请求提
+    NSMutableData *postBody = [NSMutableData data];
+    [postBody appendData:[[NSString stringWithFormat:@&quot;id=%@&amp;password=%@&amp;role=%@&quot;,@&quot;admin02&quot;,@&quot;admin02&quot;,@&quot;dean&quot;] dataUsingEncoding:NSUTF8StringEncoding]];
+    [request setHTTPBody:postBody];</code></pre></div>
 
 
 

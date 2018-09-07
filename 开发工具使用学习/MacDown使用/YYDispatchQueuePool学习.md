@@ -1,8 +1,9 @@
 # YYDispatchQueuePool学习
+
 ##目的：
-为了解决在使用多线程情下，需要限制开启线程数，以免CPU使用过度，造成崩溃或卡顿。
+解决在使用GCD多线程情形下，创建线程过多，造成CPU开销过大，挤占掉主线程的 CPU 资源。
 ##原理
-**YYDispatchQueuePool**是在开启多线程是，创建所需线程数的**同步队列**，将任务尽可能平局分配给每个**同步队列**执行
+**YYDispatchQueuePool**是在开启多线程时，创建所需线程数的**同步队列**，将任务尽可能平局分配给每个**同步队列**执行
 ##分析源码（TODO:待完善）
 1、首先了解Qos的优先级
 
@@ -60,3 +61,6 @@ static dispatch_queue_t YYDispatchContextGetQueue(YYDispatchContext *context) {
     }
 }
 ~~~
+
+##源码链接
+####[YYDispatchQueuePool](https://github.com/ibireme/YYDispatchQueuePool)
